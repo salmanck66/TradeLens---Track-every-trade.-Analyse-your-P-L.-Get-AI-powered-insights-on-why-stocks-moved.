@@ -1,47 +1,57 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 const headers = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+  "User-Agent": "Mozilla/5.0",
   Accept: "application/json",
-  "Accept-Language": "en-US,en;q=0.9",
   Referer: "https://www.nseindia.com/",
-  Connection: "keep-alive",
 };
 
 async function getCookies() {
-  await fetch("https://www.nseindia.com", { headers, cache: "no-store" });
+  await fetch("https://www.nseindia.com", { headers });
 }
 
-export async function GET() {
+export async function GET(req) {
   try {
-    // 1️⃣ get session cookies
+    const { searchParams } = new URL(req.url);
+    const index = searchParams.get("index") || "NIFTY";
+
     await getCookies();
 
-    // 2️⃣ actual API
-    const res = await fetch(
-      "https://www.nseindia.com/api/live-analysis-variations?index=gainers",
-      { headers, cache: "no-store" }
-    );
+    const [gRes, lRes] = await Promise.all([
+      fetch(
+        "https://www.nseindia.com/api/live-analysis-variations?index=gainers",
+        { headers }
+      ),
+      fetch(
+        "https://www.nseindia.com/api/live-analysis-variations?index=loosers",
+        { headers }
+      ),
+    ]);
 
-    const data = await res.json();
+    const gData = await gRes.json();
+    const lData = await lRes.json();
 
-    const list = data?.NIFTY?.data || [];
+    const gainers = gData[index]?.data || [];
+    const losers  = lData[index]?.data || [];
 
-    const stocks = list.slice(0).map((s) => ({
-      symbol: s.symbol,
-      name: s.symbol,
-      sector: "NSE",
-      change: Number(s.perChange),
-      price: Number(s.ltp),
-      type: "gainer",
-    }));
+    const map = (arr, type) =>
+      arr.slice(0, 13).map((s) => ({
+        symbol: s.symbol,
+        name: s.symbol,
+        sector: index,
+        change: Number(s.perChange),
+        price: Number(s.ltp),
+        type,
+      }));
 
-    return NextResponse.json({ ok: true, stocks });
-  } catch (e) {
     return NextResponse.json({
-      ok: false,
-      error: "NSE fetch failed",
+      ok: true,
+      gainers: map(gainers, "gainer"),
+      losers:  map(losers,  "loser"),
     });
+  } catch {
+    return NextResponse.json({ ok: false });
   }
 }

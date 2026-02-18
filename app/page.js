@@ -328,247 +328,202 @@ function PaidAI({ trade, onClose }) {
 
 // ─── MARKET SECTION ──────────────────────────────────────────────────────────
 function Market({ portfolioSymbols }) {
-  const [stocks, setStocks] = useState([]);
+
+  const [gainers, setGainers] = useState([]);
+  const [losers, setLosers] = useState([]);
+  const [index, setIndex] = useState("NIFTY");
+
   const [news, setNews] = useState([]);
-  const [ldS, setLdS] = useState(false);
-  const [ldN, setLdN] = useState(false);
-  const [nseOk, setNseOk] = useState(false);
-  const [upd, setUpd] = useState(null);
-  const [errS, setErrS] = useState(null);
-  const [errN, setErrN] = useState(null);
   const [page, setPage] = useState(1);
   const [totPg, setTotPg] = useState(1);
 
+  const [ldS, setLdS] = useState(false);
+  const [ldN, setLdN] = useState(false);
+
+  const legends = [
+    ["NIFTY","NIFTY 50"],
+    ["BANKNIFTY","BANK NIFTY"],
+    ["NIFTYNEXT50","NEXT 50"],
+    ["FOSec","F&O"],
+    ["allSec","ALL"],
+  ];
+
   async function loadStocks() {
     setLdS(true);
-    setErrS(null);
+
     try {
-      const r = await fetch("/api/nse");
+      const r = await fetch(`/api/nse?index=${index}`);
       const d = await r.json();
-      if (d.ok && d.stocks.length) {
-        setStocks(d.stocks);
-        setNseOk(true);
-        setUpd(
-          new Date().toLocaleTimeString("en-IN", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        );
-      } else throw new Error(d.error || "No data");
-    } catch {
-      setErrS(
-        "NSE data unavailable — market may be closed (Mon–Fri 9:15–3:30 IST).",
-      );
-      setNseOk(false);
-    }
+
+      if (d.ok) {
+        setGainers(d.gainers || []);
+        setLosers(d.losers || []);
+      }
+    } catch {}
+
     setLdS(false);
   }
 
   async function loadNews(p = 1) {
     setLdN(true);
-    setErrN(null);
+
     try {
       const sym = portfolioSymbols.join(",");
-      const r = await fetch(
-        `/api/rss?page=${p}&symbols=${encodeURIComponent(sym)}`,
-      );
+      const r = await fetch(`/api/rss?page=${p}&symbols=${sym}`);
       const d = await r.json();
+
       setNews(d.news || []);
-      setPage(d.page || p);
+      setPage(d.page || 1);
       setTotPg(d.totalPages || 1);
-    } catch {
-      setErrN("Couldn't load news. Check internet connection.");
-    }
+    } catch {}
+
     setLdN(false);
   }
 
-  useEffect(() => {
-    loadStocks();
-    loadNews(1);
-  }, []);
-  // Reload news when portfolio changes (new trade added)
-  useEffect(() => {
-    loadNews(1);
-  }, [portfolioSymbols.join(",")]);
+  useEffect(()=>{ loadStocks(); },[index]);
+  useEffect(()=>{ loadNews(1); },[portfolioSymbols.join(",")]);
+
+  const StockRow = (s, i, isLoser=false) => {
+    const isYours = portfolioSymbols.includes(s.symbol);
+
+    return (
+      <div className="grow" key={i}>
+        <div className="grk">{isLoser ? "▼" : `#${i+1}`}</div>
+
+        <div className="gri">
+          <div className="grsym">
+            {s.symbol}
+            {isYours && <span className="ys-tag">YOUR STOCK</span>}
+          </div>
+          <div className="grn">{s.sector}</div>
+        </div>
+
+        <div className="grr">
+          <div className={`grpct ${s.change>=0?"cg":"cr"}`}>
+            {s.change>=0?"▲":"▼"} {Math.abs(s.change).toFixed(2)}%
+          </div>
+          <div className="grpr">₹{s.price}</div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div>
+
       <div className="div">
-        <div className="dl" />
+        <div className="dl"/>
         <span className="dt">📡 Market Intelligence</span>
-        <div className="dl" />
+        <div className="dl"/>
       </div>
+
+      {/* LEGEND SELECTOR */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+        {legends.map(([key,label])=>(
+          <button
+            key={key}
+            className={`fb ${index===key?"on":""}`}
+            onClick={()=>setIndex(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="mkgrid">
-        {/* NSE Gainers & Losers */}
+
+        {/* GAINERS + LOSERS */}
         <div className="g gs mkp">
+
           <div className="mkh">
             <span className="mkt">Top Gainers & Losers</span>
-            <span className={`badge ${nseOk ? "badge-b" : "badge-g"}`}>
-              {nseOk ? "NSE Live" : "NSE India"}
-            </span>
-            {upd && <span className="lupd">{upd}</span>}
-            <button className="bref" onClick={loadStocks} disabled={ldS}>
-              {ldS ? "..." : "↻"}
-            </button>
+            <button className="bref" onClick={loadStocks}>↻</button>
           </div>
+
           {ldS ? (
-            [1, 2, 3, 4, 5, 6].map((i) => (
-              <div
-                key={i}
-                className="sk"
-                style={{ height: 44, marginBottom: 6 }}
-              />
-            ))
-          ) : errS ? (
-            <p
-              style={{
-                fontSize: ".7rem",
-                color: "var(--t3)",
-                lineHeight: 1.7,
-                padding: "8px 0",
-              }}
-            >
-              {errS}
-            </p>
+            <div className="sk" style={{height:120}}/>
           ) : (
-            stocks.map((s, i) => {
-              const isYours = portfolioSymbols.includes(s.symbol);
-              return (
-                <div className="grow" key={i}>
-                  <div className="grk">
-                    {s.type === "loser" ? "▼" : `#${i + 1}`}
-                  </div>
-                  <div className="gri">
-                    <div className="grsym">
-                      {s.symbol}
-                      {isYours && <span className="ys-tag">YOUR STOCK</span>}
-                    </div>
-                    <div className="grn">
-                      {s.name} · {s.sector}
-                    </div>
-                  </div>
-                  <div className="grr">
-                    <div className={`grpct ${s.change >= 0 ? "cg" : "cr"}`}>
-                      {s.change >= 0 ? "▲" : "▼"}{" "}
-                      {Math.abs(s.change).toFixed(2)}%
-                    </div>
-                    <div className="grpr">
-                      ₹
-                      {Number(s.price).toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+
+              {/* GAINERS */}
+              <div>
+                <div className="stitle">Gainers</div>
+                {gainers.map((s,i)=>StockRow(s,i,false))}
+              </div>
+
+              {/* LOSERS */}
+              <div>
+                <div className="stitle">Losers</div>
+                {losers.map((s,i)=>StockRow(s,i,true))}
+              </div>
+
+            </div>
           )}
         </div>
 
-        {/* News with Your Stock + Prev/Next */}
+        {/* NEWS */}
         <div className="g gs mkp">
+
           <div className="mkh">
             <span className="mkt">Market News</span>
-            <span className="badge badge-g">RSS • Free</span>
-            {portfolioSymbols.length > 0 && (
-              <span className="badge badge-r">⭐ Stocks Matched</span>
-            )}
-            <button className="bref" onClick={() => loadNews(1)} disabled={ldN}>
-              {ldN ? "..." : "↻"}
-            </button>
+            <button className="bref" onClick={()=>loadNews(1)}>↻</button>
           </div>
 
           {ldN ? (
-            [1, 2, 3, 4, 5, 6].map((i) => (
-              <div
-                key={i}
-                className="sk"
-                style={{ height: 54, marginBottom: 6 }}
-              />
-            ))
-          ) : errN ? (
-            <p
-              style={{
-                fontSize: ".7rem",
-                color: "var(--t3)",
-                padding: "8px 0",
-              }}
-            >
-              {errN}
-            </p>
-          ) : news.length === 0 ? (
-            <p
-              style={{
-                fontSize: ".7rem",
-                color: "var(--t3)",
-                padding: "8px 0",
-              }}
-            >
-              No news found. Try refreshing.
-            </p>
+            <div className="sk" style={{height:120}}/>
           ) : (
-            news.map((n, i) => (
-              <div
-                className="ni"
-                key={i}
-                onClick={() =>
-                  n.link && n.link !== "#" && window.open(n.link, "_blank")
-                }
-              >
-                <div className="ni-tags">
-                  {n.yourStock && <span className="nys">⭐ Your Stock</span>}
-                  <span className={`ntag ${TAG[n.category] || "tm2"}`}>
-                    {n.category}
+            <>
+              {news.map((n,i)=>(
+                <div className="ni" key={i}>
+                  <div className="ni-tags">
+                    {n.yourStock && <span className="nys">⭐ Your Stock</span>}
+                    <span className={`ntag ${TAG[n.category]||"tm2"}`}>
+                      {n.category}
+                    </span>
+                  </div>
+
+                  <div className="nhl">{n.headline}</div>
+
+                  <div className="nm">
+                    <span>{n.source}</span>
+                    <span>·</span>
+                    <span>{n.time}</span>
+                  </div>
+                </div>
+              ))}
+
+              {totPg > 1 && (
+                <div className="news-pgn">
+                  <button
+                    className="pgn-btn"
+                    disabled={page<=1}
+                    onClick={()=>loadNews(page-1)}
+                  >
+                    ← Prev
+                  </button>
+
+                  <span className="pgn-info">
+                    Page {page} of {totPg}
                   </span>
+
+                  <button
+                    className="pgn-btn"
+                    disabled={page>=totPg}
+                    onClick={()=>loadNews(page+1)}
+                  >
+                    Next →
+                  </button>
                 </div>
-                <div className="nhl">{n.headline}</div>
-                <div className="nm">
-                  <span>{n.source}</span>
-                  <span>·</span>
-                  <span>{n.time}</span>
-                  {n.link && n.link !== "#" && (
-                    <a
-                      href={n.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      ↗ Read
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))
+              )}
+            </>
           )}
 
-          {/* Prev / Next */}
-          {!ldN && !errN && totPg > 1 && (
-            <div className="news-pgn">
-              <button
-                className="pgn-btn"
-                disabled={page <= 1}
-                onClick={() => loadNews(page - 1)}
-              >
-                ← Prev
-              </button>
-              <span className="pgn-info">
-                Page {page} of {totPg}
-              </span>
-              <button
-                className="pgn-btn"
-                disabled={page >= totPg}
-                onClick={() => loadNews(page + 1)}
-              >
-                Next →
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>
   );
 }
+
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 function Login() {
